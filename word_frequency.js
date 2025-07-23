@@ -9,7 +9,7 @@ const stringify = require('csv-stringify/sync');
 const program = new Command();
 program
   .requiredOption('-f, --fields <fields>', 'comma separated fields to parse')
-  .option('-o, --object <object>', 'Salesforce object name', 'MCIC_Patient_Safety_Case__c')
+  .requiredOption('-d, --dataset <dataset>', 'CRM Analytics dataset API name')
   .option('--case-id <id>', 'filter by Case Id')
   .option('--csv <file>', 'write output to CSV instead of CRM Analytics')
   .parse(process.argv);
@@ -58,17 +58,32 @@ function parseText(text, field, caseId, map) {
   }
 }
 
-async function fetchRecords(conn) {
-  const where = options.caseId ? ` WHERE Id = '${options.caseId}'` : '';
-  const query = `SELECT Id, ${FIELDS.join(', ')} FROM ${options.object}${where}`;
-  const records = [];
-  let result = await conn.query(query);
-  records.push(...result.records);
-  while (!result.done) {
-    result = await conn.queryMore(result.nextRecordsUrl);
-    records.push(...result.records);
+async function getDatasetId(conn, name) {
+  const url = `/services/data/v60.0/wave/datasets?q=${encodeURIComponent(name)}`;
+  const res = await conn.request(url);
+  for (const ds of res.datasets || []) {
+    if (ds.name === name) {
+      return `${ds.id}/${ds.currentVersionId}`;
+    }
   }
-  return records;
+  throw new Error(`Dataset ${name} not found`);
+}
+
+async function fetchRecords(conn) {
+  const datasetId = await getDatasetId(conn, options.dataset);
+  let saql = `q = load \"${datasetId}\";`;
+  if (options.caseId) {
+    saql += ` q = filter q by 'Id' == \"${options.caseId}\";`;
+  }
+  saql += ` q = foreach q generate Id${FIELDS.map(f => `, '${f}'`).join('')};`;
+  const body = { query: saql };
+  const result = await conn.request({
+    method: 'POST',
+    url: `/services/data/v60.0/wave/query`,
+    body,
+    headers: { 'Content-Type': 'application/json' }
+  });
+  return result.results.records;
 }
 
 async function uploadDataset(conn, records) {

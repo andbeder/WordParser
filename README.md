@@ -26,7 +26,7 @@ node word_frequency.js -f Field1,Field2 [options]
 
 Options:
 
-- `-o, --object <object>` – Salesforce object name (`MCIC_Patient_Safety_Case__c` default)
+- `-d, --dataset <dataset>` – CRM Analytics dataset API name
 - `--case-id <id>` – filter to a single case id
 - `--csv <file>` – write parsed words to CSV instead of uploading
 
@@ -37,7 +37,7 @@ Without the `--csv` option the script attempts to upload a dataset named
 
 ```bash
 SF_USERNAME=myuser SF_PASSWORD=mypass node word_frequency.js \
-  -f Description__c,Notes__c --csv output.csv
+  -f Description__c,Notes__c -d My_Dataset --csv output.csv
 ```
 
 This command queries the specified fields, parses each record, and stores the
