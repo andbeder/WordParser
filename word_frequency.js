@@ -59,8 +59,15 @@ async function requestWithRetry(conn, opts, retry = true) {
     if (retry && err && err.errorCode === 'INVALID_SESSION_ID') {
       console.log('ℹ Session expired, reauthorizing...');
       authorize();
-      conn.instanceUrl = process.env.SF_INSTANCE_URL;
-      conn.accessToken = process.env.SF_ACCESS_TOKEN;
+      if (typeof conn._establish === 'function') {
+        conn._establish({
+          instanceUrl: process.env.SF_INSTANCE_URL,
+          accessToken: process.env.SF_ACCESS_TOKEN
+        });
+      } else {
+        conn.instanceUrl = process.env.SF_INSTANCE_URL;
+        conn.accessToken = process.env.SF_ACCESS_TOKEN;
+      }
       return requestWithRetry(conn, opts, false);
     }
     throw err;
