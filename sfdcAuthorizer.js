@@ -79,6 +79,8 @@ function authorize() {
     if (info.instanceUrl) {
       process.env.SF_INSTANCE_URL = info.instanceUrl;
     }
+    // expose the newly acquired token to child processes
+    process.env.SF_ACCESS_TOKEN = token;
 
     // 3) Ensure tmp directory exists
     const tmpDir = path.resolve(process.cwd(), "tmp");
