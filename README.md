@@ -12,11 +12,15 @@ phrases, then uploads the results as a CRM Analytics dataset or writes them to C
    npm install
    ```
 
-2. Set Salesforce credentials as environment variables:
+2. Set Salesforce credentials for JWT authorization using environment variables:
 
-   - `SF_USERNAME` – Salesforce username
-   - `SF_PASSWORD` – password concatenated with security token
-   - `SF_LOGIN_URL` – optional login URL (`https://login.salesforce.com` by default)
+   - `SFDC_CLIENT_ID` – connected app consumer key
+   - `SFDC_USERNAME` – Salesforce username
+   - `SFDC_LOGIN_URL` – login URL (`https://login.salesforce.com` by default)
+   - Place your private key in `jwt.key` or set `SFDC_JWT_KEY` to its path
+
+The script invokes `sfdcAuthorizer.js` to obtain an OAuth access token which is
+cached in `tmp/access_token.txt`.
 
 ## Usage
 
@@ -36,8 +40,9 @@ Without the `--csv` option the script attempts to upload a dataset named
 ## Example
 
 ```bash
-SF_USERNAME=myuser SF_PASSWORD=mypass node word_frequency.js \
-  -f Description__c,Notes__c -d My_Dataset --csv output.csv
+SFDC_CLIENT_ID=abc123 SFDC_USERNAME=myuser \
+  node word_frequency.js -f Description__c,Notes__c \
+  -d My_Dataset --csv output.csv
 ```
 
 This command queries the specified fields, parses each record, and stores the
