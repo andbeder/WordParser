@@ -52,9 +52,24 @@ function parseText(text, field, caseId, map) {
   }
 }
 
+async function requestWithRetry(conn, opts, retry = true) {
+  try {
+    return await conn.request(opts);
+  } catch (err) {
+    if (retry && err && err.errorCode === 'INVALID_SESSION_ID') {
+      console.log('ℹ Session expired, reauthorizing...');
+      authorize();
+      conn.instanceUrl = process.env.SF_INSTANCE_URL;
+      conn.accessToken = process.env.SF_ACCESS_TOKEN;
+      return requestWithRetry(conn, opts, false);
+    }
+    throw err;
+  }
+}
+
 async function getDatasetId(conn, name) {
   const url = `/services/data/v60.0/wave/datasets?q=${encodeURIComponent(name)}`;
-  const res = await conn.request(url);
+  const res = await requestWithRetry(conn, url);
   for (const ds of res.datasets || []) {
     if (ds.name === name) {
       return `${ds.id}/${ds.currentVersionId}`;
@@ -71,7 +86,7 @@ async function fetchRecords(conn) {
   }
   saql += ` q = foreach q generate Id${FIELDS.map(f => `, '${f}'`).join('')};`;
   const body = { query: saql };
-  const result = await conn.request({
+  const result = await requestWithRetry(conn, {
     method: 'POST',
     url: `/services/data/v60.0/wave/query`,
     body,
@@ -120,7 +135,7 @@ async function uploadDataset(conn, records) {
     data: encoded
   };
 
-  await conn.request({
+  await requestWithRetry(conn, {
     method: 'POST',
     url: `/services/data/v60.0/wave/datasets`,
     body,
