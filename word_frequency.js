@@ -13,10 +13,12 @@ program
   .requiredOption('-d, --dataset <dataset>', 'CRM Analytics dataset API name')
   .option('--case-id <id>', 'filter by Case Id')
   .option('--csv <file>', 'write output to CSV instead of CRM Analytics')
+  .option('--id-field <field>', 'field used as record Id', 'Id')
   .parse(process.argv);
 
 const options = program.opts();
 const FIELDS = options.fields.split(',').map(f => f.trim()).filter(Boolean);
+let ID_FIELD = options.idField;
 
 function addWord(map, word, field, type, caseId) {
   if (!word) return;
@@ -90,14 +92,14 @@ async function fetchRecords(conn) {
   const datasetId = await getDatasetId(conn, options.dataset);
   let saql = `q = load \"${datasetId}\";`;
   if (options.caseId) {
-    saql += ` q = filter q by 'Id' == \"${options.caseId}\";`;
+    saql += ` q = filter q by '${ID_FIELD}' == \"${options.caseId}\";`;
   }
-  saql += ` q = foreach q generate Id${FIELDS.map(f => `, '${f}'`).join('')};`;
+  saql += ` q = foreach q generate '${ID_FIELD}'${FIELDS.map(f => `, '${f}'`).join('')};`;
   const body = { query: saql };
   const result = await requestWithRetry(conn, {
     method: 'POST',
     url: `/services/data/v60.0/wave/query`,
-    body,
+    body: JSON.stringify(body),
     headers: { 'Content-Type': 'application/json' }
   });
   return result.results.records;
@@ -146,7 +148,7 @@ async function uploadDataset(conn, records) {
   await requestWithRetry(conn, {
     method: 'POST',
     url: `/services/data/v60.0/wave/datasets`,
-    body,
+    body: JSON.stringify(body),
     headers: { 'Content-Type': 'application/json' }
   });
 }
@@ -158,11 +160,22 @@ async function main() {
     accessToken: process.env.SF_ACCESS_TOKEN
   });
 
-  const records = await fetchRecords(conn);
+  let records;
+  try {
+    records = await fetchRecords(conn);
+  } catch (err) {
+    if (err && err.errorCode === '119' && ID_FIELD === 'Id') {
+      console.log('ℹ Id field not found, retrying with Record');
+      ID_FIELD = 'Record';
+      records = await fetchRecords(conn);
+    } else {
+      throw err;
+    }
+  }
   const map = {};
   for (const rec of records) {
     for (const f of FIELDS) {
-      parseText(rec[f], f, rec.Id, map);
+      parseText(rec[f], f, rec[ID_FIELD], map);
     }
   }
 
