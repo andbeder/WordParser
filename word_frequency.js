@@ -4,7 +4,8 @@ const jsforce = require('jsforce');
 const fs = require('fs');
 const zlib = require('zlib');
 const { stringify } = require('csv-stringify/sync');
-const authorize = require('./sfdcAuthorizer');
+// Use JWT-based Salesforce authentication
+const authorize = require('./sfdcJwtAuth');
 
 const program = new Command();
 program
