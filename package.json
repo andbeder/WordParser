@@ -11,8 +11,11 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "axios": "^1.11.0",
     "commander": "^14.0.0",
     "csv-stringify": "^6.6.0",
-    "jsforce": "^3.9.2"
+    "jsforce": "^3.9.2",
+    "xml-crypto": "^6.1.2",
+    "xmlbuilder2": "^3.1.1"
   }
 }
