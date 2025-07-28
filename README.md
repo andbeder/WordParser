@@ -40,6 +40,10 @@ Options:
 Without the `--csv` option the script attempts to upload a dataset named
 `Word_Frequency_File` to CRM Analytics using the REST API.
 
+The generated dataset now only includes individual words. The old `Phrase`
+type has been deprecated, so output records contain the columns `Field`,
+`Word`, and `CaseId`.
+
 ## Example
 
 ```bash
