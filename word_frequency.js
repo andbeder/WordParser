@@ -24,11 +24,11 @@ let ID_FIELD = options.idField;
 const FOLDER_ID = options.folderId || process.env.SF_FOLDER_ID;
 const SEGMENT_FIELD = options.segment;
 
-function addWord(map, word, field, type, caseId) {
+function addWord(map, word, field, caseId) {
   if (!word) return;
   const key = `${field}|${word}`;
   if (!map[key]) {
-    map[key] = { word, field, type, caseIds: new Set() };
+    map[key] = { word, field, caseIds: new Set() };
   }
   map[key].caseIds.add(caseId);
 }
@@ -43,7 +43,7 @@ function parseText(text, field, caseId, map) {
   let match;
   while ((match = single.exec(cleaned)) !== null) {
     const word = cleaned.substring(match.index + 1, match.index + match[0].length - 1);
-    addWord(map, word, field, 'Word', caseId);
+    addWord(map, word, field, caseId);
   }
 }
 
@@ -143,7 +143,7 @@ function buildDatasetArray(map) {
   for (const key of Object.keys(map)) {
     const k = map[key];
     for (const id of k.caseIds) {
-      dataset.push({ Field: k.field, Type: k.type, Word: k.word, CaseId: id });
+      dataset.push({ Field: k.field, Word: k.word, CaseId: id });
     }
   }
   return dataset;
@@ -164,7 +164,6 @@ async function uploadDataset(conn, records) {
       name: 'WordFrequency',
       fields: [
         { fullyQualifiedName: 'Field', name: 'Field', type: 'Text', label: 'Field' },
-        { fullyQualifiedName: 'Type', name: 'Type', type: 'Text', label: 'Type' },
         { fullyQualifiedName: 'Word', name: 'Word', type: 'Text', label: 'Word' },
         { fullyQualifiedName: 'CaseId', name: 'CaseId', type: 'Text', label: 'CaseId' }
       ]
