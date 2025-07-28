@@ -14,11 +14,13 @@ program
   .option('--case-id <id>', 'filter by Case Id')
   .option('--csv <file>', 'write output to CSV instead of CRM Analytics')
   .option('--id-field <field>', 'field used as record Id', 'Id')
+  .option('--folder-id <id>', 'CRM Analytics folder Id to store dataset')
   .parse(process.argv);
 
 const options = program.opts();
 const FIELDS = options.fields.split(',').map(f => f.trim()).filter(Boolean);
 let ID_FIELD = options.idField;
+const FOLDER_ID = options.folderId || process.env.SF_FOLDER_ID;
 
 function addWord(map, word, field, type, caseId) {
   if (!word) return;
@@ -117,6 +119,7 @@ function buildDatasetArray(map) {
 }
 
 async function uploadDataset(conn, records) {
+  // Upload dataset using InsightsExternalData SObjects API for compatibility
   const csv = stringify(records, { header: true });
   const gz = zlib.gzipSync(Buffer.from(csv));
   const encoded = gz.toString('base64');
@@ -137,18 +140,42 @@ async function uploadDataset(conn, records) {
     }]
   };
 
-  const body = {
-    datasetName: 'Word_Frequency_File',
-    datasetLabel: 'Word Frequency (File)',
-    operation: 'Overwrite',
-    metadataJson: JSON.stringify(metadata),
-    data: encoded
+  const header = {
+    Format: 'Csv',
+    EdgemartAlias: 'Word_Frequency_File',
+    EdgemartLabel: 'Word Frequency (File)',
+    ...(FOLDER_ID ? { EdgemartContainer: FOLDER_ID } : {}),
+    Action: 'None',
+    Operation: 'Overwrite',
+    MetadataJson: Buffer.from(JSON.stringify(metadata)).toString('base64')
+  };
+
+  const res = await requestWithRetry(conn, {
+    method: 'POST',
+    url: `/services/data/v60.0/sobjects/InsightsExternalData`,
+    body: JSON.stringify(header),
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  const id = res.id;
+
+  const part = {
+    InsightsExternalDataId: id,
+    PartNumber: 1,
+    DataFile: encoded
   };
 
   await requestWithRetry(conn, {
     method: 'POST',
-    url: `/services/data/v60.0/wave/datasets`,
-    body: JSON.stringify(body),
+    url: `/services/data/v60.0/sobjects/InsightsExternalDataPart`,
+    body: JSON.stringify(part),
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  await requestWithRetry(conn, {
+    method: 'PATCH',
+    url: `/services/data/v60.0/sobjects/InsightsExternalData/${id}`,
+    body: JSON.stringify({ Action: 'Process' }),
     headers: { 'Content-Type': 'application/json' }
   });
 }
