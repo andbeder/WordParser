@@ -86,12 +86,15 @@ async function requestWithRetry(conn, opts, retry = true) {
 }
 
 async function getDatasetId(conn, name) {
-  const url = `/services/data/v60.0/wave/datasets?q=${encodeURIComponent(name)}`;
-  const res = await requestWithRetry(conn, url);
-  for (const ds of res.datasets || []) {
-    if (ds.name === name) {
-      return `${ds.id}/${ds.currentVersionId}`;
+  let url = `/services/data/v60.0/wave/datasets?q=${encodeURIComponent(name)}`;
+  while (url) {
+    const res = await requestWithRetry(conn, url);
+    for (const ds of res.datasets || []) {
+      if (ds.name === name) {
+        return `${ds.id}/${ds.currentVersionId}`;
+      }
     }
+    url = res.nextPageUrl || null;
   }
   throw new Error(`Dataset ${name} not found`);
 }
