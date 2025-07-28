@@ -31,17 +31,21 @@ function authorize() {
   try {
     // -1) Allow token to be provided via environment to support offline usage
     if (process.env.SF_ACCESS_TOKEN) {
-      console.log("✔ Using SF_ACCESS_TOKEN from environment");
-      const tmpDir = path.dirname(tokenPath);
-      fs.mkdirSync(tmpDir, { recursive: true });
-      fs.writeFileSync(tokenPath, process.env.SF_ACCESS_TOKEN, "utf8");
-      if (!process.env.SF_INSTANCE_URL && loginUrl) {
-        process.env.SF_INSTANCE_URL = loginUrl;
+      const envToken = process.env.SF_ACCESS_TOKEN;
+      if (isTokenAccepted(envToken, instanceUrl)) {
+        console.log("✔ Using SF_ACCESS_TOKEN from environment");
+        const tmpDir = path.dirname(tokenPath);
+        fs.mkdirSync(tmpDir, { recursive: true });
+        fs.writeFileSync(tokenPath, envToken, "utf8");
+        if (!process.env.SF_INSTANCE_URL && loginUrl) {
+          process.env.SF_INSTANCE_URL = loginUrl;
+        }
+        return {
+          accessToken: envToken,
+          instanceUrl: process.env.SF_INSTANCE_URL || loginUrl,
+        };
       }
-      return {
-        accessToken: process.env.SF_ACCESS_TOKEN,
-        instanceUrl: process.env.SF_INSTANCE_URL || loginUrl,
-      };
+      console.log("ℹ Provided SF_ACCESS_TOKEN was rejected; obtaining new token...");
     }
 
     // 0) Reuse existing token when possible
@@ -85,6 +89,7 @@ function authorize() {
     if (info.instanceUrl) {
       process.env.SF_INSTANCE_URL = info.instanceUrl;
     }
+    process.env.SF_ACCESS_TOKEN = token;
 
     // 3) Ensure tmp directory exists
     const tmpDir = path.resolve(process.cwd(), "tmp");

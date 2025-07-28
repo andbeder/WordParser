@@ -18,9 +18,11 @@ phrases, then uploads the results as a CRM Analytics dataset or writes them to C
    - `SFDC_USERNAME` – Salesforce username
    - `SFDC_LOGIN_URL` – login URL (`https://login.salesforce.com` by default)
    - Place your private key in `jwt.key` or set `SFDC_JWT_KEY` to its path
+   - *(optional)* `SF_ACCESS_TOKEN` – reuse an existing access token instead of performing JWT auth
 
 The script invokes `sfdcAuthorizer.js` to obtain an OAuth access token which is
-cached in `tmp/access_token.txt`.
+cached in `tmp/access_token.txt`. If `SF_ACCESS_TOKEN` is set and valid, it will
+be reused instead of logging in again.
 
 ## Usage
 
