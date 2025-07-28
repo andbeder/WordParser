@@ -35,6 +35,7 @@ Options:
 - `-d, --dataset <dataset>` – CRM Analytics dataset API name
 - `--case-id <id>` – filter to a single case id
 - `--csv <file>` – write parsed words to CSV instead of uploading
+- `-s, --segment <field>` – segment queries by distinct values of this field
 
 Without the `--csv` option the script attempts to upload a dataset named
 `Word_Frequency_File` to CRM Analytics using the REST API.
