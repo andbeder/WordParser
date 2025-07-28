@@ -1,8 +1,8 @@
 # Word Frequency Node Application
 
 This Node.js application replicates the functionality of the original `WordFrequencyApp.java`.
-It connects to Salesforce, reads long text fields from case records, parses out words and
-phrases, then uploads the results as a CRM Analytics dataset or writes them to CSV.
+It connects to Salesforce, reads long text fields from case records, parses out words
+then uploads the results as a CRM Analytics dataset or writes them to CSV.
 
 ## Setup
 

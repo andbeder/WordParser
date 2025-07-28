@@ -179,8 +179,6 @@ public class WordFrequencyReader extends ConfiguredApp {
                               Map<String, Keyword> freq) {
         String clean = text.replaceAll("<[^>]+>", "").replace("\\n", ".").toLowerCase();
         String sentence = " " + clean + " ";
-        extractPhrases(sentence, field, caseId, freq, 3);
-        extractPhrases(sentence, field, caseId, freq, 2);
         extractPhrases(sentence, field, caseId, freq, 1);
     }
 
@@ -191,7 +189,8 @@ public class WordFrequencyReader extends ConfiguredApp {
         while (m.find()) {
             String phrase = m.group().trim();
             String key = field + "|" + phrase;
-            freq.computeIfAbsent(key, k -> new Keyword(phrase, field, "Phrase")).cases.add(caseId);
+            String type = (n == 1) ? "Word" : "Phrase";
+            freq.computeIfAbsent(key, k -> new Keyword(phrase, field, type)).cases.add(caseId);
         }
     }
 
