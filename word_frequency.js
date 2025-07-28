@@ -39,20 +39,8 @@ function parseText(text, field, caseId, map) {
   cleaned = cleaned.replace(/\n/g, '.');
   cleaned = ` ${cleaned} `;
 
-  const phrase3 = /[\W](?:[\w%:]+\W){3}/g;
-  let match;
-  while ((match = phrase3.exec(cleaned)) !== null) {
-    const phrase = cleaned.substring(match.index + 1, match.index + match[0].length - 1);
-    addWord(map, phrase, field, 'Phrase', caseId);
-  }
-
-  const phrase2 = /[\W](?:[\w%:]+\W){2}/g;
-  while ((match = phrase2.exec(cleaned)) !== null) {
-    const phrase = cleaned.substring(match.index + 1, match.index + match[0].length - 1);
-    addWord(map, phrase, field, 'Phrase', caseId);
-  }
-
   const single = /[\W](?:[\w%:]+\W)/g;
+  let match;
   while ((match = single.exec(cleaned)) !== null) {
     const word = cleaned.substring(match.index + 1, match.index + match[0].length - 1);
     addWord(map, word, field, 'Word', caseId);

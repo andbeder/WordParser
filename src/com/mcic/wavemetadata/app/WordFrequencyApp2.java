@@ -205,34 +205,16 @@ public class WordFrequencyApp2 extends ConfiguredApp {
 									for (String sentence : str) {
 										if (sentence != null && !sentence.equals("null")) {
 											sentence = " " + sentence + " ";
-											int start = 0;
-											Matcher matcher = Pattern.compile("[ \\n]\\w+[\\- ]\\w+[ \\\\n]").matcher(sentence);
-											while (matcher.find(start)) {
-												int s = matcher.start();
-												int e = matcher.end();
-												String phrase = sentence.substring(s + 1, e - 1); 
-												countWord(phrase, field, "Phrase", caseId);
-												start = s + 1;
-											}
-											start = 0;
-											matcher = Pattern.compile("[ \\n]\\w+[\\- ]\\w+[\\- ]\\w+[ \\\\n]").matcher(sentence);
-											while (matcher.find(start)) {
-												int s = matcher.start();
-												int e = matcher.end();
-												String phrase = sentence.substring(s + 1, e - 1); 
-												countWord(phrase, field, "Phrase", caseId);
-												start = s + 1;
-											}
+        int start = 0;
+        Matcher matcher = Pattern.compile("[ \n]\w+[ \n]").matcher(sentence);
+        while (matcher.find(start)) {
+            int s = matcher.start();
+            int e = matcher.end();
+            String phrase = sentence.substring(s + 1, e - 1);
+            countWord(phrase, field, "Word", caseId);
+            start = s + 1;
+        }
 											
-											start = 0;
-											matcher = Pattern.compile("[ \\n]\\w+[ \\\\n]").matcher(sentence);
-											while (matcher.find(start)) {
-												int s = matcher.start();
-												int e = matcher.end();
-												String phrase = sentence.substring(s + 1, e - 1); 
-												countWord(phrase, field, "Word", caseId);
-												start = s + 1;
-											}
 										}
 									}
 								}

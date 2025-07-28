@@ -238,40 +238,17 @@ public class WordFrequencyApp extends ConfiguredApp {
 										sentence = sentence.replaceAll("\\\\n", "\\.");
 	
 										if (sentence != null && !sentence.equals("null")) {
-											sentence = " " + sentence + " ";
-											int start = 0;
-											// Identify groups of three words
-											Matcher matcher = Pattern
-													.compile("[\\W][\\w%:]+[\\W][\\w%:]+[\\W][\\w%:]+[\\W]")
-													.matcher(sentence);
-											while (matcher.find(start)) {
-												int s = matcher.start();
-												int e = matcher.end();
-												String phrase = sentence.substring(s + 1, e - 1);
-												countWord(freq, phrase, field, "Phrase", caseId);
-												start = s + 1;
-											}
-											// Identify groups of two words
-											start = 0;
-											matcher = Pattern.compile("[\\W][\\w%:]+[\\W][\\w%:]+[\\W]").matcher(sentence);
-											while (matcher.find(start)) {
-												int s = matcher.start();
-												int e = matcher.end();
-												String phrase = sentence.substring(s + 1, e - 1);
-												countWord(freq, phrase, field, "Phrase", caseId);
-												start = s + 1;
-											}
-	
-											start = 0;
-											// Identify single words
-											matcher = Pattern.compile("[\\W][\\w%:]+[\\W]").matcher(sentence);
-											while (matcher.find(start)) {
-												int s = matcher.start();
-												int e = matcher.end();
-												String phrase = sentence.substring(s + 1, e - 1);
-												countWord(freq, phrase, field, "Word", caseId);
-												start = s + 1;
-											}
+                                                                               sentence = " " + sentence + " ";
+                                                                               // Identify single words
+                                                                               int start = 0;
+                                                                               Matcher matcher = Pattern.compile("[\\W][\\w%:]+[\\W]").matcher(sentence);
+                                                                               while (matcher.find(start)) {
+                                                                               int s = matcher.start();
+                                                                               int e = matcher.end();
+                                                                               String phrase = sentence.substring(s + 1, e - 1);
+                                                                               countWord(freq, phrase, field, "Word", caseId);
+                                                                               start = s + 1;
+                                                                               }
 										}
 									}
 								}
