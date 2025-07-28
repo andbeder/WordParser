@@ -14,6 +14,7 @@ program
   .option('--case-id <id>', 'filter by Case Id')
   .option('--csv <file>', 'write output to CSV instead of CRM Analytics')
   .option('--id-field <field>', 'field used as record Id', 'Id')
+  .option('-s, --segment <field>', 'field used to segment large queries')
   .option('--folder-id <id>', 'CRM Analytics folder Id to store dataset')
   .parse(process.argv);
 
@@ -21,6 +22,7 @@ const options = program.opts();
 const FIELDS = options.fields.split(',').map(f => f.trim()).filter(Boolean);
 let ID_FIELD = options.idField;
 const FOLDER_ID = options.folderId || process.env.SF_FOLDER_ID;
+const SEGMENT_FIELD = options.segment;
 
 function addWord(map, word, field, type, caseId) {
   if (!word) return;
@@ -57,6 +59,10 @@ function parseText(text, field, caseId, map) {
   }
 }
 
+function escapeValue(val) {
+  return String(val).replace(/"/g, '\\"');
+}
+
 async function requestWithRetry(conn, opts, retry = true) {
   try {
     return await conn.request(opts);
@@ -90,13 +96,8 @@ async function getDatasetId(conn, name) {
   throw new Error(`Dataset ${name} not found`);
 }
 
-async function fetchRecords(conn) {
-  const datasetId = await getDatasetId(conn, options.dataset);
-  let saql = `q = load \"${datasetId}\";`;
-  if (options.caseId) {
-    saql += ` q = filter q by '${ID_FIELD}' == \"${options.caseId}\";`;
-  }
-  saql += ` q = foreach q generate '${ID_FIELD}'${FIELDS.map(f => `, '${f}'`).join('')};`;
+async function getSegmentValues(conn, datasetId, field) {
+  const saql = `q = load \"${datasetId}\"; q = group q by '${field}'; q = foreach q generate '${field}' as val;`;
   const body = { query: saql };
   const result = await requestWithRetry(conn, {
     method: 'POST',
@@ -104,7 +105,46 @@ async function fetchRecords(conn) {
     body: JSON.stringify(body),
     headers: { 'Content-Type': 'application/json' }
   });
-  return result.results.records;
+  return (result.results.records || []).map(r => r.val).filter(v => v !== undefined && v !== null);
+}
+
+async function fetchRecords(conn) {
+  const datasetId = await getDatasetId(conn, options.dataset);
+  if (SEGMENT_FIELD) {
+    const segments = await getSegmentValues(conn, datasetId, SEGMENT_FIELD);
+    const all = [];
+    for (const seg of segments) {
+      let saql = `q = load \"${datasetId}\";`;
+      saql += ` q = filter q by '${SEGMENT_FIELD}' == \"${escapeValue(seg)}\";`;
+      if (options.caseId) {
+        saql += ` q = filter q by '${ID_FIELD}' == \"${options.caseId}\";`;
+      }
+      saql += ` q = foreach q generate '${ID_FIELD}'${FIELDS.map(f => `, '${f}'`).join('')};`;
+      const body = { query: saql };
+      const res = await requestWithRetry(conn, {
+        method: 'POST',
+        url: `/services/data/v60.0/wave/query`,
+        body: JSON.stringify(body),
+        headers: { 'Content-Type': 'application/json' }
+      });
+      all.push(...res.results.records);
+    }
+    return all;
+  } else {
+    let saql = `q = load \"${datasetId}\";`;
+    if (options.caseId) {
+      saql += ` q = filter q by '${ID_FIELD}' == \"${options.caseId}\";`;
+    }
+    saql += ` q = foreach q generate '${ID_FIELD}'${FIELDS.map(f => `, '${f}'`).join('')};`;
+    const body = { query: saql };
+    const result = await requestWithRetry(conn, {
+      method: 'POST',
+      url: `/services/data/v60.0/wave/query`,
+      body: JSON.stringify(body),
+      headers: { 'Content-Type': 'application/json' }
+    });
+    return result.results.records;
+  }
 }
 
 function buildDatasetArray(map) {
