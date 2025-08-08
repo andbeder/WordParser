@@ -4,6 +4,7 @@ const jsforce = require('jsforce');
 const fs = require('fs');
 const zlib = require('zlib');
 const { stringify } = require('csv-stringify/sync');
+const { SingleBar, Presets } = require('cli-progress');
 // Use JWT-based Salesforce authentication
 const authorize = require('./sfdcJwtAuth');
 
@@ -99,10 +100,8 @@ async function getSegmentValues(conn, datasetId, field) {
   return (result.results.records || []).map(r => r.val).filter(v => v !== undefined && v !== null);
 }
 
-async function fetchRecords(conn) {
-  const datasetId = await getDatasetId(conn, options.dataset);
-  if (SEGMENT_FIELD) {
-    const segments = await getSegmentValues(conn, datasetId, SEGMENT_FIELD);
+async function fetchRecords(conn, datasetId, segments, progress) {
+  if (segments && segments.length) {
     const all = [];
     for (const seg of segments) {
       let saql = `q = load \"${datasetId}\";`;
@@ -119,6 +118,7 @@ async function fetchRecords(conn) {
         headers: { 'Content-Type': 'application/json' }
       });
       all.push(...res.results.records);
+      if (progress) progress.increment();
     }
     return all;
   } else {
@@ -134,6 +134,7 @@ async function fetchRecords(conn) {
       body: JSON.stringify(body),
       headers: { 'Content-Type': 'application/json' }
     });
+    if (progress) progress.increment();
     return result.results.records;
   }
 }
@@ -217,15 +218,25 @@ async function main() {
     accessToken: process.env.SF_ACCESS_TOKEN
   });
 
+  const datasetId = await getDatasetId(conn, options.dataset);
+  let segments = [];
+  if (SEGMENT_FIELD) {
+    segments = await getSegmentValues(conn, datasetId, SEGMENT_FIELD);
+  }
+  const stepCount = (segments.length || 1) + 1; // segments + upload
+  const progress = new SingleBar({}, Presets.shades_classic);
+  progress.start(stepCount, 0);
+
   let records;
   try {
-    records = await fetchRecords(conn);
+    records = await fetchRecords(conn, datasetId, segments, progress);
   } catch (err) {
     if (err && err.errorCode === '119' && ID_FIELD === 'Id') {
       console.log('ℹ Id field not found, retrying with Record');
       ID_FIELD = 'Record';
-      records = await fetchRecords(conn);
+      records = await fetchRecords(conn, datasetId, segments, progress);
     } else {
+      progress.stop();
       throw err;
     }
   }
@@ -243,6 +254,8 @@ async function main() {
   } else {
     await uploadDataset(conn, dataset);
   }
+  progress.increment();
+  progress.stop();
 }
 
 main().catch(err => {
