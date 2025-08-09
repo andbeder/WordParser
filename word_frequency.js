@@ -24,6 +24,7 @@ const FIELDS = options.fields.split(',').map(f => f.trim()).filter(Boolean);
 let ID_FIELD = options.idField;
 const FOLDER_ID = options.folderId || process.env.SF_FOLDER_ID;
 const SEGMENT_FIELD = options.segment;
+const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB per upload chunk
 
 function addWord(map, word, field, caseId) {
   if (!word) return;
@@ -150,11 +151,16 @@ function buildDatasetArray(map) {
   return dataset;
 }
 
-async function uploadDataset(conn, records) {
+async function uploadDataset(conn, records, progress) {
   // Upload dataset using InsightsExternalData SObjects API for compatibility
   const csv = stringify(records, { header: true });
   const gz = zlib.gzipSync(Buffer.from(csv));
   const encoded = gz.toString('base64');
+
+  const chunkCount = Math.ceil(encoded.length / CHUNK_SIZE);
+  if (progress) {
+    progress.setTotal(progress.total + chunkCount);
+  }
 
   const metadata = {
     fileFormat: { charsetName: 'UTF-8', fieldsDelimitedBy: ',', linesTerminatedBy: '\r\n' },
@@ -190,18 +196,22 @@ async function uploadDataset(conn, records) {
 
   const id = res.id;
 
-  const part = {
-    InsightsExternalDataId: id,
-    PartNumber: 1,
-    DataFile: encoded
-  };
+  for (let i = 0; i < chunkCount; i++) {
+    const part = {
+      InsightsExternalDataId: id,
+      PartNumber: i + 1,
+      DataFile: encoded.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE)
+    };
 
-  await requestWithRetry(conn, {
-    method: 'POST',
-    url: `/services/data/v60.0/sobjects/InsightsExternalDataPart`,
-    body: JSON.stringify(part),
-    headers: { 'Content-Type': 'application/json' }
-  });
+    await requestWithRetry(conn, {
+      method: 'POST',
+      url: `/services/data/v60.0/sobjects/InsightsExternalDataPart`,
+      body: JSON.stringify(part),
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    if (progress) progress.increment();
+  }
 
   await requestWithRetry(conn, {
     method: 'PATCH',
@@ -223,7 +233,7 @@ async function main() {
   if (SEGMENT_FIELD) {
     segments = await getSegmentValues(conn, datasetId, SEGMENT_FIELD);
   }
-  const stepCount = (segments.length || 1) + 1; // segments + upload
+  const stepCount = segments.length || 1; // segments
   const progress = new SingleBar({}, Presets.shades_classic);
   progress.start(stepCount, 0);
 
@@ -251,11 +261,11 @@ async function main() {
 
   if (options.csv) {
     fs.writeFileSync(options.csv, stringify(dataset, { header: true }));
+    progress.stop();
   } else {
-    await uploadDataset(conn, dataset);
+    await uploadDataset(conn, dataset, progress);
+    progress.stop();
   }
-  progress.increment();
-  progress.stop();
 }
 
 main().catch(err => {
