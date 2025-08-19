@@ -76,7 +76,7 @@ async function requestWithRetry(conn, opts, retry = true) {
 }
 
 async function getDatasetId(conn, name) {
-  let url = `/services/data/v60.0/wave/datasets?q=${encodeURIComponent(name)}`;
+  let url = `/services/data/v60.0/wave/datasets`;
   let allDatasets = [];
   while (url) {
     const res = await requestWithRetry(conn, url);
