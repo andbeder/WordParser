@@ -77,16 +77,23 @@ async function requestWithRetry(conn, opts, retry = true) {
 
 async function getDatasetId(conn, name) {
   let url = `/services/data/v60.0/wave/datasets?q=${encodeURIComponent(name)}`;
+  let allDatasets = [];
   while (url) {
     const res = await requestWithRetry(conn, url);
-    for (const ds of res.datasets || []) {
+    const datasets = res.datasets || [];
+    allDatasets.push(...datasets);
+    
+    for (const ds of datasets) {
       if (ds.name === name) {
         return `${ds.id}/${ds.currentVersionId}`;
       }
     }
     url = res.nextPageUrl || null;
   }
-  throw new Error(`Dataset ${name} not found`);
+  
+  // Enhanced error with available datasets for debugging
+  const availableNames = allDatasets.map(ds => ds.name).sort();
+  throw new Error(`Dataset ${name} not found. Available datasets: ${availableNames.slice(0, 10).join(', ')}${availableNames.length > 10 ? ` (and ${availableNames.length - 10} more)` : ''}`);
 }
 
 async function getSegmentValues(conn, datasetId, field) {
