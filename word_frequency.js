@@ -121,7 +121,7 @@ async function fetchRecords(conn, datasetId, segments, progress) {
       if (options.caseId) {
         saql += ` q = filter q by '${ID_FIELD}' == \"${options.caseId}\";`;
       }
-      saql += ` q = foreach q generate '${ID_FIELD}'${FIELDS.map(f => `, '${f}'`).join('')};`;
+      saql += ` q = foreach q generate '${ID_FIELD}'${FIELDS.map(f => `, '${f}'`).join('')}; q = limit q 20000;`;
       const body = { query: saql };
       const res = await requestWithRetry(conn, {
         method: 'POST',
