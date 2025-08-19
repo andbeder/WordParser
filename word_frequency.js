@@ -17,6 +17,7 @@ program
   .option('--id-field <field>', 'field used as record Id', 'Id')
   .option('-s, --segment <field>', 'field used to segment large queries')
   .option('--folder-id <id>', 'CRM Analytics folder Id to store dataset')
+  .option('--filter <condition>', 'custom SAQL filter condition (e.g., "Snapshot_Date_Key == \"20250731\"")')
   .parse(process.argv);
 
 const options = program.opts();
@@ -24,6 +25,7 @@ const FIELDS = options.fields.split(',').map(f => f.trim()).filter(Boolean);
 let ID_FIELD = options.idField;
 const FOLDER_ID = options.folderId || process.env.SF_FOLDER_ID;
 const SEGMENT_FIELD = options.segment;
+const CUSTOM_FILTER = options.filter;
 const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB per upload chunk
 
 function addWord(map, word, field, caseId) {
@@ -121,6 +123,9 @@ async function fetchRecords(conn, datasetId, segments, progress) {
       if (options.caseId) {
         saql += ` q = filter q by '${ID_FIELD}' == \"${options.caseId}\";`;
       }
+      if (CUSTOM_FILTER) {
+        saql += ` q = filter q by ${CUSTOM_FILTER};`;
+      }
       saql += ` q = foreach q generate '${ID_FIELD}'${FIELDS.map(f => `, '${f}'`).join('')}; q = limit q 20000;`;
       const body = { query: saql };
       const res = await requestWithRetry(conn, {
@@ -145,7 +150,10 @@ async function fetchRecords(conn, datasetId, segments, progress) {
     if (options.caseId) {
       saql += ` q = filter q by '${ID_FIELD}' == \"${options.caseId}\";`;
     }
-    saql += ` q = foreach q generate '${ID_FIELD}'${FIELDS.map(f => `, '${f}'`).join('')};`;
+    if (CUSTOM_FILTER) {
+      saql += ` q = filter q by ${CUSTOM_FILTER};`;
+    }
+    saql += ` q = foreach q generate '${ID_FIELD}'${FIELDS.map(f => `, '${f}'`).join('')}; q = limit q 20000;`;
     const body = { query: saql };
     const result = await requestWithRetry(conn, {
       method: 'POST',
@@ -314,10 +322,11 @@ async function main() {
   progress.update(progress.value, { stage: 'Preparing data query...' });
   let records;
   try {
+    const filterMsg = CUSTOM_FILTER ? ` with custom filter` : '';
     if (segments && segments.length) {
-      progress.update(progress.value, { stage: `Starting ${segments.length} segment queries...` });
+      progress.update(progress.value, { stage: `Starting ${segments.length} segment queries${filterMsg}...` });
     } else {
-      progress.update(progress.value, { stage: 'Executing single dataset query...' });
+      progress.update(progress.value, { stage: `Executing single dataset query${filterMsg}...` });
     }
     records = await fetchRecords(conn, datasetId, segments, progress);
     progress.update(progress.value, { stage: `Data fetch complete: ${records.length} total records` });
