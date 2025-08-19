@@ -46,13 +46,11 @@ function addWord(map, word, field, caseId) {
 function parseText(text, field, caseId, map) {
   if (!text) return;
   let cleaned = text.replace(/(<[^>]+>)/g, '').toLowerCase();
-  cleaned = cleaned.replace(/\n/g, '.');
-  cleaned = ` ${cleaned} `;
-
-  const single = /[\W](?:[\w%:]+\W)/g;
-  let match;
-  while ((match = single.exec(cleaned)) !== null) {
-    const word = cleaned.substring(match.index + 1, match.index + match[0].length - 1);
+  cleaned = cleaned.replace(/\n/g, ' ');
+  
+  // Extract words using word boundaries - much more accurate
+  const words = cleaned.match(/\b\w+\b/g) || [];
+  for (const word of words) {
     addWord(map, word, field, caseId);
   }
 }
