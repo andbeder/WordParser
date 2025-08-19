@@ -164,15 +164,24 @@ function buildDatasetArray(map) {
 
 async function uploadDataset(conn, records, progress) {
   // Upload dataset using InsightsExternalData SObjects API for compatibility
-  if (progress) progress.update(progress.value, { stage: 'Preparing CSV data...' });
+  if (progress) progress.update(progress.value, { stage: `Preparing CSV for ${records.length} records...` });
+  if (progress) progress.increment(1, { stage: 'CSV data prepared' });
+  
   const csv = stringify(records, { header: true });
+  const csvSize = Buffer.from(csv).length;
+  if (progress) progress.update(progress.value, { stage: `Compressing ${(csvSize / 1024 / 1024).toFixed(1)}MB CSV...` });
+  
   const gz = zlib.gzipSync(Buffer.from(csv));
+  const compressedSize = gz.length;
+  const compressionRatio = ((1 - compressedSize / csvSize) * 100).toFixed(1);
+  if (progress) progress.increment(1, { stage: `Compression complete (${compressionRatio}% reduction)` });
+  
   const encoded = gz.toString('base64');
-
   const chunkCount = Math.ceil(encoded.length / CHUNK_SIZE);
   if (progress) {
     progress.setTotal(progress.total + chunkCount);
-    progress.update(progress.value, { stage: `Prepared ${chunkCount} upload chunks` });
+    progress.update(progress.value, { stage: `Ready to upload ${chunkCount} chunks (${(compressedSize / 1024 / 1024).toFixed(1)}MB)` });
+    progress.increment(1, { stage: 'Upload preparation complete' });
   }
 
   const metadata = {
@@ -210,9 +219,14 @@ async function uploadDataset(conn, records, progress) {
 
   const id = res.id;
 
+  const startTime = Date.now();
   for (let i = 0; i < chunkCount; i++) {
-    if (progress) progress.update(progress.value, { stage: `Uploading chunk ${i + 1}/${chunkCount}...` });
+    const chunkSize = encoded.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE).length;
+    const chunkMB = (chunkSize * 0.75 / 1024 / 1024).toFixed(1); // Base64 to binary conversion
     
+    if (progress) progress.update(progress.value, { stage: `Uploading chunk ${i + 1}/${chunkCount} (${chunkMB}MB)...` });
+    
+    const chunkStart = Date.now();
     const part = {
       InsightsExternalDataId: id,
       PartNumber: i + 1,
@@ -226,7 +240,11 @@ async function uploadDataset(conn, records, progress) {
       headers: { 'Content-Type': 'application/json' }
     });
 
-    if (progress) progress.increment(1, { stage: `Chunk ${i + 1}/${chunkCount} uploaded` });
+    const chunkTime = ((Date.now() - chunkStart) / 1000).toFixed(1);
+    const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+    const avgSpeed = (((i + 1) / chunkCount * 100)).toFixed(1);
+    
+    if (progress) progress.increment(1, { stage: `Chunk ${i + 1}/${chunkCount} uploaded in ${chunkTime}s (${avgSpeed}% complete, ${totalTime}s elapsed)` });
   }
 
   if (progress) progress.update(progress.value, { stage: 'Triggering data processing...' });
@@ -240,29 +258,35 @@ async function uploadDataset(conn, records, progress) {
 
 async function main() {
   // Calculate total steps for complete lifecycle tracking
-  let totalSteps = 1; // authorization
+  let totalSteps = 3; // JWT decryption, authorization, connection
   totalSteps += 1; // dataset lookup
   if (SEGMENT_FIELD) totalSteps += 1; // segment values retrieval
   totalSteps += (SEGMENT_FIELD ? 0 : 1); // data fetching (will be calculated later for segments)
-  totalSteps += 1; // text parsing
+  totalSteps += 2; // text parsing (now includes per-record progress)
   totalSteps += 1; // dataset building
-  if (!options.csv) totalSteps += 1; // upload preparation + final processing
+  if (!options.csv) totalSteps += 3; // CSV prep, compression, upload prep + final processing
 
   const progress = new SingleBar({
     format: 'Progress |{bar}| {percentage}% | {value}/{total} Steps | {stage}',
     barCompleteChar: '\u2588',
     barIncompleteChar: '\u2591',
   }, Presets.shades_classic);
-  progress.start(totalSteps, 0, { stage: 'Starting...' });
+  progress.start(totalSteps, 0, { stage: 'Starting application...' });
 
-  // Step 1: Authorization
-  progress.update(0, { stage: 'Authorizing...' });
+  // Step 1: JWT Authentication
+  progress.update(0, { stage: 'Decrypting JWT key...' });
+  progress.increment(1, { stage: 'JWT key decrypted' });
+  
+  progress.update(progress.value, { stage: 'Authenticating with Salesforce...' });
   authorize();
+  progress.increment(1, { stage: 'Authentication complete' });
+  
+  progress.update(progress.value, { stage: 'Establishing connection...' });
   const conn = new jsforce.Connection({
     instanceUrl: process.env.SF_INSTANCE_URL,
     accessToken: process.env.SF_ACCESS_TOKEN
   });
-  progress.increment(1, { stage: 'Authorization complete' });
+  progress.increment(1, { stage: 'Connection established' });
 
   // Step 2: Dataset lookup
   progress.update(progress.value, { stage: 'Looking up dataset...' });
@@ -279,31 +303,49 @@ async function main() {
     progress.setTotal(totalSteps - 1 + segments.length);
   }
 
-  // Step 4: Data fetching
-  progress.update(progress.value, { stage: 'Fetching data...' });
+  // Step 4: Data fetching with detailed progress
+  progress.update(progress.value, { stage: 'Preparing data query...' });
   let records;
   try {
+    if (segments && segments.length) {
+      progress.update(progress.value, { stage: `Starting ${segments.length} segment queries...` });
+    } else {
+      progress.update(progress.value, { stage: 'Executing single dataset query...' });
+    }
     records = await fetchRecords(conn, datasetId, segments, progress);
+    progress.update(progress.value, { stage: `Data fetch complete: ${records.length} total records` });
   } catch (err) {
     if (err && err.errorCode === '119' && ID_FIELD === 'Id') {
       console.log('ℹ Id field not found, retrying with Record');
       ID_FIELD = 'Record';
+      progress.update(progress.value, { stage: 'Retrying with Record field...' });
       records = await fetchRecords(conn, datasetId, segments, progress);
+      progress.update(progress.value, { stage: `Data fetch complete: ${records.length} total records` });
     } else {
       progress.stop();
       throw err;
     }
   }
 
-  // Step 5: Text parsing
-  progress.update(progress.value, { stage: `Processing ${records.length} records...` });
+  // Step 5: Text parsing with per-record progress
+  progress.update(progress.value, { stage: `Initializing text parser for ${records.length} records...` });
+  progress.increment(1, { stage: 'Parser initialized' });
+  
   const map = {};
-  for (const rec of records) {
+  const batchSize = Math.max(1, Math.floor(records.length / 10)); // Update every 10% of records
+  
+  progress.update(progress.value, { stage: `Processing records (0/${records.length})...` });
+  for (let i = 0; i < records.length; i++) {
+    const rec = records[i];
     for (const f of FIELDS) {
       parseText(rec[f], f, rec[ID_FIELD], map);
     }
+    
+    if (i % batchSize === 0 || i === records.length - 1) {
+      progress.update(progress.value, { stage: `Processing records (${i + 1}/${records.length})...` });
+    }
   }
-  progress.increment(1, { stage: 'Text parsing complete' });
+  progress.increment(1, { stage: `Text parsing complete (${Object.keys(map).length} unique words)` });
 
   // Step 6: Dataset building
   progress.update(progress.value, { stage: 'Building dataset...' });
@@ -311,14 +353,16 @@ async function main() {
   progress.increment(1, { stage: `Dataset built with ${dataset.length} records` });
 
   if (options.csv) {
-    progress.update(progress.value, { stage: 'Writing CSV file...' });
-    fs.writeFileSync(options.csv, stringify(dataset, { header: true }));
-    progress.update(progress.total, { stage: 'CSV file written successfully' });
+    progress.update(progress.value, { stage: `Writing ${dataset.length} records to CSV...` });
+    const csvContent = stringify(dataset, { header: true });
+    fs.writeFileSync(options.csv, csvContent);
+    const fileSize = (fs.statSync(options.csv).size / 1024).toFixed(1);
+    progress.update(progress.total, { stage: `CSV file written successfully (${fileSize}KB)` });
     progress.stop();
   } else {
-    progress.update(progress.value, { stage: 'Uploading to Salesforce...' });
+    progress.update(progress.value, { stage: 'Starting Salesforce upload process...' });
     await uploadDataset(conn, dataset, progress);
-    progress.update(progress.total, { stage: 'Upload complete' });
+    progress.update(progress.total, { stage: 'Upload and processing complete' });
     progress.stop();
   }
 }

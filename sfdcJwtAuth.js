@@ -11,25 +11,24 @@ const crypto = require("crypto");
 function decryptJwtKey(encryptedKeyPath, keyPass) {
   try {
     const encryptedData = fs.readFileSync(encryptedKeyPath);
-    const parts = encryptedData.toString('utf8').split(':');
     
-    if (parts.length !== 2) {
-      throw new Error('Invalid encrypted key format. Expected salt:encrypted_data');
+    // OpenSSL format: "Salted__" + 8-byte salt + encrypted data
+    if (encryptedData.slice(0, 8).toString('ascii') !== 'Salted__') {
+      throw new Error('Invalid OpenSSL encrypted file format');
     }
     
-    const salt = Buffer.from(parts[0], 'hex');
-    const encrypted = Buffer.from(parts[1], 'hex');
+    const salt = encryptedData.slice(8, 16);
+    const encrypted = encryptedData.slice(16);
     
-    // Derive key using PBKDF2
-    const key = crypto.pbkdf2Sync(keyPass, salt, 100000, 32, 'sha256');
-    
-    // Extract IV (first 16 bytes) and encrypted content
-    const iv = encrypted.slice(0, 16);
-    const encryptedContent = encrypted.slice(16);
+    // Derive key and IV using OpenSSL's EVP_BytesToKey with PBKDF2
+    // OpenSSL uses 10000 iterations by default for PBKDF2
+    const keyAndIv = crypto.pbkdf2Sync(keyPass, salt, 10000, 48, 'sha256');
+    const key = keyAndIv.slice(0, 32);
+    const iv = keyAndIv.slice(32, 48);
     
     // Decrypt
     const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-    let decrypted = decipher.update(encryptedContent, null, 'utf8');
+    let decrypted = decipher.update(encrypted, null, 'utf8');
     decrypted += decipher.final('utf8');
     
     return decrypted;
