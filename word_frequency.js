@@ -25,8 +25,14 @@ const FIELDS = options.fields.split(',').map(f => f.trim()).filter(Boolean);
 let ID_FIELD = options.idField;
 const FOLDER_ID = options.folderId || process.env.SF_FOLDER_ID;
 const SEGMENT_FIELD = options.segment;
-const CUSTOM_FILTER = options.filter;
+const CUSTOM_FILTER = options.filter ? normalizeFilter(options.filter) : null;
 const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB per upload chunk
+
+function normalizeFilter(filter) {
+  // Auto-quote string values that don't already have quotes
+  return filter.replace(/==\s*([^"'\s][^"'\s\]]+)(?=\s|$)/g, '== "$1"')
+               .replace(/!=\s*([^"'\s][^"'\s\]]+)(?=\s|$)/g, '!= "$1"');
+}
 
 function addWord(map, word, field, caseId) {
   if (!word) return;
