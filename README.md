@@ -17,7 +17,8 @@ then uploads the results as a CRM Analytics dataset or writes them to CSV.
    - `SFDC_CLIENT_ID` – connected app consumer key
    - `SFDC_USERNAME` – Salesforce username
    - `SFDC_LOGIN_URL` – login URL (`https://login.salesforce.com` by default)
-   - Place your private key in `jwt.key` or set `SFDC_JWT_KEY` to its path
+   - `KEY_PASS` – passphrase to decrypt the encrypted JWT private key file
+   - Place your encrypted private key in `jwt.key.enc` (AES-256-CBC with PBKDF2)
    - *(optional)* `SF_ACCESS_TOKEN` – reuse an existing access token instead of performing JWT auth
 
 The script invokes `sfdcAuthorizer.js` to obtain an OAuth access token which is
@@ -47,7 +48,7 @@ type has been deprecated, so output records contain the columns `Field`,
 ## Example
 
 ```bash
-SFDC_CLIENT_ID=abc123 SFDC_USERNAME=myuser \
+SFDC_CLIENT_ID=abc123 SFDC_USERNAME=myuser KEY_PASS=mypassword \
   node word_frequency.js -f Description__c,Notes__c \
   -d My_Dataset --csv output.csv
 ```

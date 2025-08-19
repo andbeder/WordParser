@@ -1,3 +1,4 @@
 node_modules/
 jwt.key
 tmp/access_token.txt
+jwt.key.enc
