@@ -5,6 +5,13 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
+// In-memory token cache to avoid file system dependency
+let tokenCache = {
+  accessToken: null,
+  instanceUrl: null,
+  expiry: null
+};
+
 /**
  * Decrypts the encrypted JWT key file using AES-256-CBC with PBKDF2
  */
@@ -60,7 +67,6 @@ function authorize() {
   const username = process.env.SFDC_USERNAME;
   const loginUrl = process.env.SFDC_LOGIN_URL;
   const instanceUrl = process.env.SF_INSTANCE_URL || loginUrl;
-  const tokenPath = path.resolve(process.cwd(), "tmp", "access_token.txt");
 
   // Validate required environment variables
   if (!keyPass) {
@@ -79,12 +85,15 @@ function authorize() {
       const envToken = process.env.SF_ACCESS_TOKEN;
       if (isTokenAccepted(envToken, instanceUrl)) {
         console.log("✔ Using SF_ACCESS_TOKEN from environment");
-        const tmpDir = path.dirname(tokenPath);
-        fs.mkdirSync(tmpDir, { recursive: true });
-        fs.writeFileSync(tokenPath, envToken, "utf8");
         if (!process.env.SF_INSTANCE_URL && loginUrl) {
           process.env.SF_INSTANCE_URL = loginUrl;
         }
+        // Cache in memory
+        tokenCache = {
+          accessToken: envToken,
+          instanceUrl: process.env.SF_INSTANCE_URL || loginUrl,
+          expiry: Date.now() + (2 * 60 * 60 * 1000) // 2 hours from now
+        };
         return {
           accessToken: envToken,
           instanceUrl: process.env.SF_INSTANCE_URL || loginUrl,
@@ -93,21 +102,23 @@ function authorize() {
       console.log("ℹ Provided SF_ACCESS_TOKEN was rejected; obtaining new token...");
     }
 
-    // 0) Reuse existing token when possible
-    if (fs.existsSync(tokenPath)) {
-      const existing = fs.readFileSync(tokenPath, "utf8").trim();
-      if (existing && isTokenAccepted(existing, instanceUrl)) {
-        console.log("✔ Reusing existing access token");
-        process.env.SF_ACCESS_TOKEN = existing;
-        if (!process.env.SF_INSTANCE_URL) {
-          process.env.SF_INSTANCE_URL = instanceUrl;
-        }
+    // 0) Reuse cached token when possible and not expired
+    if (tokenCache.accessToken && tokenCache.expiry > Date.now()) {
+      if (isTokenAccepted(tokenCache.accessToken, instanceUrl)) {
+        console.log("✔ Reusing cached access token");
+        process.env.SF_ACCESS_TOKEN = tokenCache.accessToken;
+        process.env.SF_INSTANCE_URL = tokenCache.instanceUrl;
         return {
-          accessToken: existing,
-          instanceUrl: process.env.SF_INSTANCE_URL || instanceUrl,
+          accessToken: tokenCache.accessToken,
+          instanceUrl: tokenCache.instanceUrl,
         };
       }
-      console.log("ℹ Existing access token rejected; obtaining new token...");
+      console.log("ℹ Cached access token rejected; obtaining new token...");
+      // Clear invalid cache
+      tokenCache = { accessToken: null, instanceUrl: null, expiry: null };
+    } else if (tokenCache.accessToken) {
+      console.log("ℹ Cached token expired; obtaining new token...");
+      tokenCache = { accessToken: null, instanceUrl: null, expiry: null };
     }
 
     // 1) Decrypt the JWT key and keep in memory
@@ -157,10 +168,13 @@ function authorize() {
     }
     process.env.SF_ACCESS_TOKEN = token;
 
-    // 4) Write token to tmp/access_token.txt
-    const outPath = path.join(path.dirname(tokenPath), "access_token.txt");
-    fs.writeFileSync(outPath, token, "utf8");
-    console.log(`✔ Access token written to ${outPath}`);
+    // 4) Cache token in memory instead of writing to disk
+    tokenCache = {
+      accessToken: token,
+      instanceUrl: process.env.SF_INSTANCE_URL || instanceUrl,
+      expiry: Date.now() + (2 * 60 * 60 * 1000) // 2 hours from now
+    };
+    console.log(`✔ Access token cached in memory`);
     return {
       accessToken: token,
       instanceUrl: process.env.SF_INSTANCE_URL || instanceUrl,
