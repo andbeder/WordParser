@@ -110,15 +110,19 @@ function authorize() {
       console.log("ℹ Existing access token rejected; obtaining new token...");
     }
 
-    // 1) Decrypt the JWT key and write to temporary file
+    // 1) Decrypt the JWT key and keep in memory
     const decryptedKey = decryptJwtKey(encryptedKeyFile, keyPass);
-    const tempKeyFile = path.resolve(process.cwd(), "tmp", "jwt.key.tmp");
+
+    // 2) Create a temporary file with restricted permissions for minimal exposure
+    const tempKeyFile = path.resolve(process.cwd(), "tmp", `jwt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.key`);
     const tmpDir = path.dirname(tempKeyFile);
     fs.mkdirSync(tmpDir, { recursive: true });
-    fs.writeFileSync(tempKeyFile, decryptedKey, "utf8");
-
+    
     try {
-      // 2) Log in via JWT using temporary key file
+      // Write with restricted permissions (owner read-only)
+      fs.writeFileSync(tempKeyFile, decryptedKey, { mode: 0o600 });
+      
+      // 3) Log in via JWT using temporary key file
       execSync(
         `sf org login jwt \
             -i "${clientId}" \
@@ -130,8 +134,11 @@ function authorize() {
         { stdio: "inherit" }
       );
     } finally {
-      // Clean up temporary key file
+      // Immediately clean up temporary key file
       if (fs.existsSync(tempKeyFile)) {
+        // Overwrite with random data before deletion for security
+        const randomData = crypto.randomBytes(decryptedKey.length);
+        fs.writeFileSync(tempKeyFile, randomData);
         fs.unlinkSync(tempKeyFile);
       }
     }
