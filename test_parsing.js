@@ -2,7 +2,7 @@
 const { Command } = require('commander');
 const jsforce = require('jsforce');
 const { SingleBar, Presets } = require('cli-progress');
-const authorize = require('./sfdcJwtAuth');
+const authorize = require('./sfdcAuth');
 
 const program = new Command();
 program
@@ -13,6 +13,8 @@ program
   .option('-s, --segment <field>', 'field used to segment large queries')
   .option('--filter <condition>', 'custom SAQL filter condition')
   .option('--test-records <count>', 'number of records to test (default: 5)', '5')
+  .option('--auth <method>', 'authentication method: jwt, oauth, or auto', 'auto')
+  .option('--environment <env>', 'salesforce environment: production or sandbox (for OAuth)')
   .parse(process.argv);
 
 const options = program.opts();
@@ -37,7 +39,7 @@ async function requestWithRetry(conn, opts, retry = true) {
   } catch (err) {
     if (retry && err && err.errorCode === 'INVALID_SESSION_ID') {
       console.log('ℹ Session expired, reauthorizing...');
-      authorize();
+      await authorize();
       if (typeof conn._establish === 'function') {
         conn._establish({
           instanceUrl: process.env.SF_INSTANCE_URL,
@@ -142,7 +144,7 @@ async function main() {
   console.log('🔍 Starting word parsing diagnostic test...\n');
   
   // Authorization
-  authorize();
+  await authorize({ authMethod: options.auth, environment: options.environment });
   const conn = new jsforce.Connection({
     instanceUrl: process.env.SF_INSTANCE_URL,
     accessToken: process.env.SF_ACCESS_TOKEN

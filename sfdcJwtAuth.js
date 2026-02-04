@@ -62,7 +62,7 @@ function isTokenAccepted(token, instanceUrl) {
 function authorize() {
   const alias = "myJwtOrg";
   const clientId = process.env.SFDC_CLIENT_ID;
-  const encryptedKeyFile = "./jwt.key.enc";
+  const encryptedKeyFile = "../jwt.key.enc";
   const keyPass = process.env.KEY_PASS;
   const username = process.env.SFDC_USERNAME;
   const loginUrl = process.env.SFDC_LOGIN_URL;

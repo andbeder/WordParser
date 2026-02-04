@@ -5,8 +5,8 @@ const fs = require('fs');
 const zlib = require('zlib');
 const { stringify } = require('csv-stringify/sync');
 const { SingleBar, Presets } = require('cli-progress');
-// Use JWT-based Salesforce authentication
-const authorize = require('./sfdcJwtAuth');
+// Unified Salesforce authentication (supports JWT and OAuth)
+const authorize = require('./sfdcAuth');
 
 const program = new Command();
 program
@@ -18,6 +18,8 @@ program
   .option('-s, --segment <field>', 'field used to segment large queries')
   .option('--folder-id <id>', 'CRM Analytics folder Id to store dataset')
   .option('--filter <condition>', 'custom SAQL filter condition (e.g., "Snapshot_Date_Key == \"20250731\"")')
+  .option('--auth <method>', 'authentication method: jwt, oauth, or auto', 'auto')
+  .option('--environment <env>', 'salesforce environment: production or sandbox (for OAuth)')
   .parse(process.argv);
 
 const options = program.opts();
@@ -65,7 +67,7 @@ async function requestWithRetry(conn, opts, retry = true) {
   } catch (err) {
     if (retry && err && err.errorCode === 'INVALID_SESSION_ID') {
       console.log('ℹ Session expired, reauthorizing...');
-      authorize();
+      await authorize();
       if (typeof conn._establish === 'function') {
         conn._establish({
           instanceUrl: process.env.SF_INSTANCE_URL,
@@ -297,7 +299,7 @@ async function main() {
   progress.increment(1, { stage: 'JWT key decrypted' });
   
   progress.update(progress.value, { stage: 'Authenticating with Salesforce...' });
-  authorize();
+  await authorize({ authMethod: options.auth, environment: options.environment });
   progress.increment(1, { stage: 'Authentication complete' });
   
   progress.update(progress.value, { stage: 'Establishing connection...' });
